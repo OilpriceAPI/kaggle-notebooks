@@ -1,3 +1,5 @@
 kaggle-venv/
 notebook-*/
 *.json
+kaggle-cli-venv/
+test-venv/
