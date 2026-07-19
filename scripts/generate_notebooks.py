@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SDK_VERSION = "1.10.2"
+SDK_VERSION = "1.11.0"
 CONTRACT_VERSION = "2026-07-18"
 SUPPORT_SOURCE = (ROOT / "scripts" / "notebook_support.py").read_text()
 
@@ -148,7 +148,7 @@ SPREAD_INTRO = """# WTI and Brent Spread Analysis
 This notebook compares API-timestamped WTI and Brent records returned by OilPriceAPI.
 It is an educational analysis, not a trading signal or investment recommendation.
 
-- SDK: `oilpriceapi[pandas]==1.10.2`
+- SDK: `oilpriceapi[pandas]==1.11.0`
 - Authentication: Kaggle Secrets label `OILPRICEAPI_KEY`
 - [Reviewed product facts](https://api.oilpriceapi.com/product-facts.json) (contract 2026-07-18)
 - [Current API documentation](https://docs.oilpriceapi.com/api-reference/prices/latest)
@@ -210,7 +210,7 @@ This notebook calculates descriptive indicators from Brent records returned by
 OilPriceAPI. Indicators summarize the requested sample; they do not forecast prices
 or constitute a trading or investment recommendation.
 
-- SDK: `oilpriceapi[pandas]==1.10.2`
+- SDK: `oilpriceapi[pandas]==1.11.0`
 - Authentication: Kaggle Secrets label `OILPRICEAPI_KEY`
 - [Reviewed product facts](https://api.oilpriceapi.com/product-facts.json) (contract 2026-07-18)
 - [Current API documentation](https://docs.oilpriceapi.com/api-reference/prices/latest)

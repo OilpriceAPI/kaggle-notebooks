@@ -22,7 +22,7 @@ Both public Kaggle URLs currently require a republish receipt for this repositor
 
 ## Runtime Contract
 
-- Python package: `oilpriceapi[pandas]==1.10.2`
+- Python package: `oilpriceapi[pandas]==1.11.0`
 - Secret label: `OILPRICEAPI_KEY` through Kaggle Add-ons > Secrets
 - First request: `GET /v1/prices/latest?by_code=BRENT_CRUDE_USD`
 - History request: `GET /v1/prices/historical` with explicit dates and `interval=daily`
@@ -33,7 +33,7 @@ The notebooks preserve symbol, numeric value, currency, unit, source, the exact 
 ## Validate Locally
 
 ```bash
-python3 -m pip install "oilpriceapi[pandas]==1.10.2" matplotlib seaborn
+python3 -m pip install "oilpriceapi[pandas]==1.11.0" matplotlib seaborn
 python3 scripts/generate_notebooks.py
 ./scripts/scan-secrets.sh
 python3 -m unittest discover -s tests -v
@@ -46,6 +46,6 @@ The unit suite executes the exact committed notebook cells against deterministic
 
 - [Product facts](https://api.oilpriceapi.com/product-facts.json)
 - [API reference](https://docs.oilpriceapi.com/api-reference/prices/latest)
-- [Python SDK](https://pypi.org/project/oilpriceapi/1.10.2/)
+- [Python SDK](https://pypi.org/project/oilpriceapi/1.11.0/)
 - [Data usage policy](https://www.oilpriceapi.com/legal/data-usage)
 - [Service status](https://status.oilpriceapi.com)
