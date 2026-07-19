@@ -14,7 +14,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOKS = sorted(ROOT.glob("*.ipynb"))
-SDK_VERSION = "1.10.2"
+SDK_VERSION = "1.11.0"
 
 
 def load_support():
