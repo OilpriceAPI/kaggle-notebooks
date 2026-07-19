@@ -1,7 +1,7 @@
 # Kaggle Publication Checklist
 
 This repository contains reference notebooks for OilPriceAPI analysis. Public
-notebook metadata and stored outputs must remain reproducible, source-timestamped,
+notebook metadata and stored outputs must remain reproducible, API-timestamped,
 and free of credentials or account details.
 
 ## Before Publishing
@@ -12,8 +12,8 @@ and free of credentials or account details.
    output, URL, commit, screenshot, issue, or notebook metadata.
 3. Enable internet access for package installation and API requests.
 4. Run every cell from a clean kernel.
-5. Confirm the notebook reports commodity code, currency, unit, source
-   timestamp, requested date range, and any data limitations.
+5. Confirm the notebook reports commodity code, currency, unit, source, the exact
+   API timestamp field used, requested date range, and any data limitations.
 6. Confirm missing secret, authentication, entitlement, rate-limit, timeout,
    empty response, and malformed response paths give a working next action.
 7. Clear mutable outputs before committing the repository copy. Public Kaggle
@@ -23,7 +23,9 @@ and free of credentials or account details.
 
    ```bash
    ./scripts/scan-secrets.sh
-   python3 -m pytest -q
+   python3 scripts/generate_notebooks.py
+   python3 -m unittest discover -s tests -v
+   python3 scripts/package_kaggle.py
    ```
 
 ## Product Claims
@@ -36,9 +38,9 @@ data-rights facts:
 - [Pricing and current access](https://www.oilpriceapi.com/pricing)
 - [Data usage policy](https://www.oilpriceapi.com/legal/data-usage)
 
-Latest available values include source timestamps. Refresh cadence varies by
-source, market hours, dataset, and plan. Do not describe notebook values as a
-live executable quote or imply guaranteed freshness.
+Latest available values include API timestamps. Refresh cadence varies by
+source, market hours, dataset, and account entitlement. Do not describe notebook
+values as contemporaneous quotes or imply fixed freshness.
 
 ## Publication Receipt
 

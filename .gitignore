@@ -3,3 +3,5 @@ notebook-*/
 *.json
 kaggle-cli-venv/
 test-venv/
+dist/
+__pycache__/
