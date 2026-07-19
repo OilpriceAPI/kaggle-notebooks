@@ -8,10 +8,14 @@ on:
 
 jobs:
   security:
-    name: Secret and JSON validation
+    name: Notebook contract validation
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Scan tracked content for credential patterns
         run: ./scripts/scan-secrets.sh
@@ -20,3 +24,17 @@ jobs:
         run: |
           python3 -m json.tool 01_wti_brent_spread_analysis.ipynb >/dev/null
           python3 -m json.tool 02_oil_price_technical_analysis.ipynb >/dev/null
+
+      - name: Install pinned notebook dependencies
+        run: python3 -m pip install "oilpriceapi[pandas]==1.10.2" matplotlib seaborn
+
+      - name: Regenerate notebooks and reject drift
+        run: |
+          python3 scripts/generate_notebooks.py
+          git diff --exit-code -- 01_wti_brent_spread_analysis.ipynb 02_oil_price_technical_analysis.ipynb
+
+      - name: Execute exact notebook cells against fixtures
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Build Kaggle CLI packages
+        run: python3 scripts/package_kaggle.py

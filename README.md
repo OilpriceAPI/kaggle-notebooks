@@ -1,78 +1,51 @@
 # OilPriceAPI Kaggle Notebooks
 
-Professional Jupyter notebooks for oil price analysis using the [OilPriceAPI Python SDK](https://github.com/oilpriceapi/python-sdk).
+Reproducible, source-aware OilPriceAPI analysis notebooks. Repository copies contain no stored outputs, API keys, account responses, or customer data.
+
+Product and access claims are governed by the [versioned OilPriceAPI product-facts contract](https://api.oilpriceapi.com/product-facts.json), reviewed 2026-07-18. Latest available values include API timestamps; cadence, history depth, and access vary by source, market hours, dataset, and account entitlement.
 
 ## Notebooks
 
-### 1. WTI vs Brent Crude Spread Analysis
+### WTI and Brent Spread Analysis
 
-**Kaggle:** [View Notebook](https://www.kaggle.com/code/kwaldman/oilpriceapi-wti-vs-brent) ✅ LIVE
+- Repository: [01_wti_brent_spread_analysis.ipynb](01_wti_brent_spread_analysis.ipynb)
+- Kaggle URL: https://www.kaggle.com/code/kwaldman/oilpriceapi-wti-vs-brent
+- Method: strict latest and history GET requests, API-record-date alignment, and descriptive spread statistics
 
-Analyzes the price differential between West Texas Intermediate (WTI) and Brent Crude oil benchmarks.
+### API-Timestamped Brent Technical Indicators
 
-**Topics covered:**
+- Repository: [02_oil_price_technical_analysis.ipynb](02_oil_price_technical_analysis.ipynb)
+- Kaggle URL: https://www.kaggle.com/code/kwaldman/oil-price-technical-analysis
+- Method: strict latest and history GET requests plus descriptive SMA, EMA, RSI, and return-volatility calculations
 
-- Historical price comparison
-- Spread calculation and visualization
-- Trading signal identification
-- Statistical analysis
+Both public Kaggle URLs currently require a republish receipt for this repository revision. Do not treat their displayed output as current unless the notebook shows its execution time and API timestamp fields.
 
-### 2. Oil Price Technical Analysis
+## Runtime Contract
 
-**Kaggle:** [View Notebook](https://www.kaggle.com/code/kwaldman/oil-price-technical-analysis) ✅ LIVE
+- Python package: `oilpriceapi[pandas]==1.10.2`
+- Secret label: `OILPRICEAPI_KEY` through Kaggle Add-ons > Secrets
+- First request: `GET /v1/prices/latest?by_code=BRENT_CRUDE_USD`
+- History request: `GET /v1/prices/historical` with explicit dates and `interval=daily`
+- Recovery: missing secret, 401, 402/403, 429, timeout, empty response, and malformed response fail closed with a next action
 
-Comprehensive technical analysis with indicators and forecasting.
+The notebooks preserve symbol, numeric value, currency, unit, source, the exact API timestamp field used, freshness when returned, requested range, method, and execution time. They do not default missing units, currencies, sources, timestamps, or values.
 
-**Topics covered:**
-
-- Technical indicators (SMA, EMA, RSI)
-- Volatility analysis
-- Moving average crossovers
-- Trend detection
-
-## Requirements
+## Validate Locally
 
 ```bash
-pip install oilpriceapi pandas matplotlib seaborn scipy
+python3 -m pip install "oilpriceapi[pandas]==1.10.2" matplotlib seaborn
+python3 scripts/generate_notebooks.py
+./scripts/scan-secrets.sh
+python3 -m unittest discover -s tests -v
+python3 scripts/package_kaggle.py
 ```
 
-## Get API Key
+The unit suite executes the exact committed notebook cells against deterministic production-shaped fixtures. A public Kaggle publish additionally requires a private Kaggle credential and an attached non-customer OilPriceAPI secret; neither belongs in this repository.
 
-Free tier includes 100 requests (lifetime):
+## Sources
 
-- **Sign up:** [oilpriceapi.com/signup](https://www.oilpriceapi.com/signup?utm_source=kaggle&utm_medium=notebook&utm_campaign=readme)
-- **Documentation:** [docs.oilpriceapi.com](https://docs.oilpriceapi.com)
-- **Python SDK:** [github.com/oilpriceapi/python-sdk](https://github.com/oilpriceapi/python-sdk)
-
-## Running Notebooks
-
-### On Kaggle
-
-1. Click notebook links above
-2. Click "Copy & Edit"
-3. Add your API key in Secrets (label: `OILPRICEAPI_KEY`)
-4. Run all cells
-
-### Locally
-
-```bash
-jupyter notebook notebook_name.ipynb
-```
-
-## Contributing
-
-Issues and pull requests welcome!
-
-## License
-
-MIT
-
-## Also Available As
-
-- **[Python SDK](https://pypi.org/project/oilpriceapi/)** - The SDK used in these notebooks
-- **[Node.js SDK](https://www.npmjs.com/package/oilpriceapi)** - TypeScript/JavaScript SDK
-- **[OpenBB Integration](https://pypi.org/project/openbb-oilpriceapi/)** - OpenBB Platform provider
-
----
-
-**Built by [OilPriceAPI](https://www.oilpriceapi.com)** - Real-time commodity price data
+- [Product facts](https://api.oilpriceapi.com/product-facts.json)
+- [API reference](https://docs.oilpriceapi.com/api-reference/prices/latest)
+- [Python SDK](https://pypi.org/project/oilpriceapi/1.10.2/)
+- [Data usage policy](https://www.oilpriceapi.com/legal/data-usage)
+- [Service status](https://status.oilpriceapi.com)
