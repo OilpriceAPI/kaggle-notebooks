@@ -1,0 +1,22 @@
+name: Validate notebooks
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  security:
+    name: Secret and JSON validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan tracked content for credential patterns
+        run: ./scripts/scan-secrets.sh
+
+      - name: Validate notebook JSON
+        run: |
+          python3 -m json.tool 01_wti_brent_spread_analysis.ipynb >/dev/null
+          python3 -m json.tool 02_oil_price_technical_analysis.ipynb >/dev/null
