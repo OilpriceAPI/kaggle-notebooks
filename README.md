@@ -42,6 +42,10 @@ python3 scripts/package_kaggle.py
 
 The unit suite executes the exact committed notebook cells against deterministic production-shaped fixtures. A public Kaggle publish additionally requires a private Kaggle credential and an attached non-customer OilPriceAPI secret; neither belongs in this repository.
 
+For the one-command release gate, Kaggle CLI packaging steps, public-result
+review, and credential/metadata rules, see
+[Kaggle Notebook Release Practices](KAGGLE_BEST_PRACTICES.md).
+
 ## Sources
 
 - [Product facts](https://api.oilpriceapi.com/product-facts.json)

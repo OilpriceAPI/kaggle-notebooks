@@ -26,15 +26,7 @@ jobs:
           python3 -m json.tool 02_oil_price_technical_analysis.ipynb >/dev/null
 
       - name: Install pinned notebook dependencies
-        run: python3 -m pip install "oilpriceapi[pandas]==1.10.2" matplotlib seaborn
+        run: python3 -m pip install "oilpriceapi[pandas]==1.11.0" matplotlib seaborn
 
-      - name: Regenerate notebooks and reject drift
-        run: |
-          python3 scripts/generate_notebooks.py
-          git diff --exit-code -- 01_wti_brent_spread_analysis.ipynb 02_oil_price_technical_analysis.ipynb
-
-      - name: Execute exact notebook cells against fixtures
-        run: python3 -m unittest discover -s tests -v
-
-      - name: Build Kaggle CLI packages
-        run: python3 scripts/package_kaggle.py
+      - name: Run the pre-upload release gate
+        run: ./scripts/validate_before_upload.sh
