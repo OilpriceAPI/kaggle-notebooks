@@ -26,7 +26,7 @@ jobs:
           python3 -m json.tool 02_oil_price_technical_analysis.ipynb >/dev/null
 
       - name: Install pinned notebook dependencies
-        run: python3 -m pip install "oilpriceapi[pandas]==1.11.0" matplotlib seaborn
+        run: python3 -m pip install "oilpriceapi[pandas]==1.17.0" matplotlib seaborn
 
       - name: Run the pre-upload release gate
         run: ./scripts/validate_before_upload.sh

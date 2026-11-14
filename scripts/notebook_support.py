@@ -10,10 +10,52 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 PRODUCT_FACTS_URL = "https://api.oilpriceapi.com/product-facts.json"
 STATUS_URL = "https://status.oilpriceapi.com"
+# Public pricing link. The API's own 402 upgrade URL carries the caller's account
+# id, so the notebook prints this fixed link instead of echoing that one.
+PRICING_URL = (
+    "https://www.oilpriceapi.com/pricing"
+    "?utm_source=kaggle&utm_medium=notebook&utm_campaign=history_gate"
+)
+HISTORY_UPGRADE_CODE = "UPGRADE_REQUIRED"
+_MAX_SERVER_MESSAGE = 400
 
 
 class NotebookDataError(RuntimeError):
     """Raised when a successful HTTP response is empty or unsafe to analyze."""
+
+
+class HistoryAccessRequired(RuntimeError):
+    """Raised when the account is not entitled to historical prices (HTTP 402)."""
+
+
+def _server_message(error: Exception) -> Optional[str]:
+    """Return the API's human explanation from a 402 body, if it is a plain string."""
+    body = getattr(error, "raw_body", None)
+    if not isinstance(body, dict):
+        body = getattr(error, "response", None)
+    if not isinstance(body, dict):
+        return None
+    message = body.get("message")
+    if not isinstance(message, str):
+        nested = body.get("error")
+        message = nested.get("message") if isinstance(nested, dict) else None
+    if not isinstance(message, str) or not message.strip():
+        return None
+    return message.strip()[:_MAX_SERVER_MESSAGE]
+
+
+def history_upgrade_notice(error: Exception) -> str:
+    """Explain a 402 on the history request without echoing keys or account ids."""
+    explanation = _server_message(error) or (
+        "Historical price data requires a paid plan. "
+        "Latest prices (/v1/prices/latest) are available on the Free tier."
+    )
+    return (
+        f"{HISTORY_UPGRADE_CODE}: {explanation}\n"
+        f"Upgrade to run the historical analysis: {PRICING_URL}\n"
+        "The latest-price context above is still valid; the historical sections "
+        "below are skipped for this account."
+    )
 
 
 def get_api_key() -> str:
@@ -45,7 +87,12 @@ def recovery_for_status(status_code: Optional[int]) -> Tuple[str, str]:
             "INVALID_KEY",
             "Replace the key in Kaggle Secrets or the OilPriceAPI dashboard, then rerun.",
         )
-    if status_code in (402, 403):
+    if status_code == 402:
+        return (
+            HISTORY_UPGRADE_CODE,
+            f"This data requires a paid plan. Upgrade at {PRICING_URL}.",
+        )
+    if status_code == 403:
         return (
             "LOCKED_DATASET",
             "Review dataset access for the account at https://www.oilpriceapi.com/pricing.",
@@ -91,6 +138,30 @@ def safe_request(operation: Callable[[], Dict[str, Any]]) -> Dict[str, Any]:
     try:
         payload = operation()
     except Exception as error:
+        code, recovery = recovery_for_exception(error)
+        raise RuntimeError(f"{code}: {recovery}") from None
+
+    if not isinstance(payload, dict):
+        raise NotebookDataError(
+            "MALFORMED_RESPONSE: expected a JSON object. Retry once, then contact support."
+        )
+    return payload
+
+
+def safe_history_request(
+    operation: Callable[[], Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Like safe_request, but a 402 raises HistoryAccessRequired with a clear notice.
+
+    From 2026-11-16 the history endpoints answer 402 UPGRADE_REQUIRED for accounts
+    without a paid plan or active trial. That is an entitlement answer, not a
+    failure, so the caller can continue with latest prices only.
+    """
+    try:
+        payload = operation()
+    except Exception as error:
+        if getattr(error, "status_code", None) == 402:
+            raise HistoryAccessRequired(history_upgrade_notice(error)) from None
         code, recovery = recovery_for_exception(error)
         raise RuntimeError(f"{code}: {recovery}") from None
 
