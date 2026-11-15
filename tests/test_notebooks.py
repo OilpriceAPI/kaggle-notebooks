@@ -4,6 +4,8 @@ import importlib.util
 import json
 import os
 import re
+import contextlib
+import io
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -14,7 +16,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOKS = sorted(ROOT.glob("*.ipynb"))
-SDK_VERSION = "1.11.0"
+SDK_VERSION = "1.17.0"
 
 
 def load_support():
@@ -84,6 +86,84 @@ class FakeClient:
         raise AssertionError(f"Unexpected request path: {path}")
 
 
+# Body shape of V1::PricesController#require_paid_tier_for_historical on
+# oilpriceapi-api origin/main (#4490, #10744): render_standard_error with these
+# top-level keys. The upgrade URL carries the caller's account id as `ref`.
+GATE_402_BODY = {
+    "success": False,
+    "error": "Historical data requires paid access",
+    "error_code": "UPGRADE_REQUIRED",
+    "message": (
+        "Historical price data (past_day, past_week, past_month, past_year, "
+        "historical, history) requires a paid plan. Latest prices "
+        "(/v1/prices/latest) are available on the Free tier."
+    ),
+    "reason": "not_entitled",
+    "blocked": {
+        "feature": "historical",
+        "endpoint": "/v1/prices/historical",
+        "requires_paid_plan": ["/v1/prices/historical", "/v1/prices/history"],
+    },
+    "upgrade": {
+        "url": "https://www.oilpriceapi.com/pricing?utm_source=api&utm_medium=402"
+        "&utm_campaign=historical_gate&ref=00000000-account-id-must-not-leak",
+    },
+}
+
+
+def gate_402_error():
+    """The exception SDK 1.17.0 raises for the gate's 402, built the SDK's way."""
+    try:
+        from oilpriceapi.exceptions import PaymentRequiredError
+    except ImportError:  # pragma: no cover - CI installs the pinned SDK
+        class PaymentRequiredError(Exception):  # type: ignore[no-redef]
+            def __init__(self, message, **kwargs):
+                super().__init__(message)
+                self.status_code = 402
+                self.raw_body = kwargs.get("raw_body")
+                self.code = kwargs.get("code")
+
+    return PaymentRequiredError(
+        GATE_402_BODY["message"],
+        code="UPGRADE_REQUIRED",
+        raw_body=GATE_402_BODY,
+        response=GATE_402_BODY,
+    )
+
+
+class FreeAccountClient(FakeClient):
+    """Latest succeeds; history answers the 2026-11-16 gate's 402."""
+
+    def request(self, method: str, path: str, params=None, timeout=None):
+        if path == "/v1/prices/historical":
+            self.calls.append(
+                {"method": method, "path": path, "params": params, "timeout": timeout}
+            )
+            raise gate_402_error()
+        return super().request(method, path, params=params, timeout=timeout)
+
+
+def run_notebook(path: Path, client_class) -> str:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    client_class.calls = []
+    namespace: Dict[str, Any] = {"__name__": "__notebook_test__"}
+    notebook = json.loads(path.read_text())
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        for cell in notebook["cells"]:
+            if cell["cell_type"] != "code":
+                continue
+            source = "".join(cell["source"])
+            if source.startswith("%pip"):
+                continue
+            if cell["id"] in {"spread-fetch", "technical-fetch"}:
+                namespace["OilPriceAPI"] = client_class
+            exec(compile(source, f"{path.name}:{cell['id']}", "exec"), namespace)
+    return output.getvalue()
+
+
 class NotebookContractTests(unittest.TestCase):
     def test_notebook_json_metadata_claims_and_outputs(self):
         self.assertEqual(len(NOTEBOOKS), 2)
@@ -100,6 +180,7 @@ class NotebookContractTests(unittest.TestCase):
             "OILPRICEAPI_KEY",
             "INVALID_KEY",
             "LOCKED_DATASET",
+            "UPGRADE_REQUIRED",
             "RATE_LIMITED",
             "TIMEOUT",
             "EMPTY_RESPONSE",
@@ -175,9 +256,55 @@ class NotebookContractTests(unittest.TestCase):
                 self.assertIn("/v1/prices/historical", paths)
                 self.assertTrue(all(call["timeout"] == 30 for call in FakeClient.calls))
 
+    def test_free_account_402_on_history_degrades_to_latest_only(self):
+        with mock.patch.dict(
+            os.environ, {"OILPRICEAPI_KEY": "fixture-key"}, clear=False
+        ):
+            for path in NOTEBOOKS:
+                output = run_notebook(path, FreeAccountClient)
+                paths = [call["path"] for call in FreeAccountClient.calls]
+                self.assertIn("/v1/prices/latest", paths)
+                self.assertIn("/v1/prices/historical", paths)
+                # No silent fallback to another history surface (api#11013).
+                self.assertTrue(
+                    set(paths) <= {"/v1/prices/latest", "/v1/prices/historical"},
+                    paths,
+                )
+                self.assertIn("UPGRADE_REQUIRED: Historical price data", output)
+                self.assertIn(SUPPORT.PRICING_URL, output)
+                self.assertIn("Latest-available record context", output)
+                self.assertIn("Skipped: this section needs historical prices", output)
+                self.assertNotIn("account-id-must-not-leak", output)
+                self.assertNotIn("fixture-key", output)
+
+    def test_paid_account_output_has_no_upgrade_notice(self):
+        with mock.patch.dict(
+            os.environ, {"OILPRICEAPI_KEY": "fixture-key"}, clear=False
+        ):
+            for path in NOTEBOOKS:
+                output = run_notebook(path, FakeClient)
+                self.assertNotIn("UPGRADE_REQUIRED", output)
+                self.assertNotIn("Skipped:", output)
+                self.assertIn("History records returned: ", output)
+
+    def test_non_402_history_errors_still_fail_closed(self):
+        class StatusError(Exception):
+            def __init__(self, status_code):
+                super().__init__("credential-value-must-not-leak")
+                self.status_code = status_code
+
+        for status_code, expected_code in ((401, "INVALID_KEY"), (403, "LOCKED_DATASET"), (503, "SERVER_ERROR")):
+            with self.assertRaisesRegex(RuntimeError, f"^{expected_code}:"):
+                SUPPORT.safe_history_request(
+                    lambda code=status_code: (_ for _ in ()).throw(StatusError(code))
+                )
+        with self.assertRaises(SUPPORT.HistoryAccessRequired) as raised:
+            SUPPORT.safe_history_request(lambda: (_ for _ in ()).throw(gate_402_error()))
+        self.assertNotIn("account-id-must-not-leak", str(raised.exception))
+
     def test_recovery_and_payload_validation(self):
         self.assertEqual(SUPPORT.recovery_for_status(401)[0], "INVALID_KEY")
-        self.assertEqual(SUPPORT.recovery_for_status(402)[0], "LOCKED_DATASET")
+        self.assertEqual(SUPPORT.recovery_for_status(402)[0], "UPGRADE_REQUIRED")
         self.assertEqual(SUPPORT.recovery_for_status(403)[0], "LOCKED_DATASET")
         self.assertEqual(SUPPORT.recovery_for_status(429)[0], "RATE_LIMITED")
         self.assertEqual(SUPPORT.recovery_for_exception(TimeoutError())[0], "TIMEOUT")
@@ -222,7 +349,7 @@ class NotebookContractTests(unittest.TestCase):
 
         for status_code, expected_code in (
             (401, "INVALID_KEY"),
-            (402, "LOCKED_DATASET"),
+            (402, "UPGRADE_REQUIRED"),
             (403, "LOCKED_DATASET"),
             (429, "RATE_LIMITED"),
             (503, "SERVER_ERROR"),

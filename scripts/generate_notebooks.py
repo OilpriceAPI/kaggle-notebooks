@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from textwrap import indent
 from typing import Any, Dict, List
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SDK_VERSION = "1.11.0"
+SDK_VERSION = "1.17.0"
 CONTRACT_VERSION = "2026-07-18"
 SUPPORT_SOURCE = (ROOT / "scripts" / "notebook_support.py").read_text()
 
@@ -66,7 +67,8 @@ the API key, raw account response, or customer identifiers.
 | --- | --- | --- |
 | Missing Kaggle secret | `MISSING_SECRET` | Attach `OILPRICEAPI_KEY` through Kaggle Add-ons > Secrets. |
 | HTTP 401 | `INVALID_KEY` | Replace the key in Secrets or the OilPriceAPI dashboard. |
-| HTTP 402/403 | `LOCKED_DATASET` | Review account dataset access. |
+| HTTP 402 on history | `UPGRADE_REQUIRED` | History needs a paid plan or active trial. The notebook prints the API's explanation and the pricing link, keeps the latest-price context, and skips the historical sections. |
+| HTTP 403 | `LOCKED_DATASET` | Review account dataset access. |
 | HTTP 429 | `RATE_LIMITED` | Wait for the API-provided reset window. |
 | Timeout | `TIMEOUT` | Reduce the range, retry once, then check service status. |
 | Empty success | `EMPTY_RESPONSE` | Adjust the range or code; do not chart an empty result. |
@@ -74,6 +76,7 @@ the API key, raw account response, or customer identifiers.
 """
 
 RECOVERY_ASSERTIONS = """assert recovery_for_status(401)[0] == "INVALID_KEY"
+assert recovery_for_status(402)[0] == "UPGRADE_REQUIRED"
 assert recovery_for_status(403)[0] == "LOCKED_DATASET"
 assert recovery_for_status(429)[0] == "RATE_LIMITED"
 assert recovery_for_exception(TimeoutError())[0] == "TIMEOUT"
@@ -97,21 +100,29 @@ FETCH_HELPERS = """def fetch_symbol(client, symbol):
             timeout=30,
         )
     )
-    history_payload = safe_request(
-        lambda: client.request(
+    try:
+        history_payload = safe_history_request(
+            lambda: client.request(
             "GET",
-            "/v1/prices/historical",
-            params={
-                "by_code": symbol,
-                "start_date": START_DATE.isoformat(),
-                "end_date": END_DATE.isoformat(),
-                "interval": "daily",
-                "per_page": 500,
-            },
-            timeout=30,
+                "/v1/prices/historical",
+                params={
+                    "by_code": symbol,
+                    "start_date": START_DATE.isoformat(),
+                    "end_date": END_DATE.isoformat(),
+                    "interval": "daily",
+                    "per_page": 500,
+                },
+                timeout=30,
+            )
         )
+    except HistoryAccessRequired as notice:
+        # Free accounts: history is a paid feature (402). Keep the latest record.
+        return extract_latest(latest_payload, symbol), None, str(notice)
+    return (
+        extract_latest(latest_payload, symbol),
+        extract_history(history_payload, symbol),
+        None,
     )
-    return extract_latest(latest_payload, symbol), extract_history(history_payload, symbol)
 
 
 def history_frame(records):
@@ -137,10 +148,21 @@ def print_context(latest_rows, history_rows):
     ]
     print("Latest-available record context; inspect timestamp and freshness before use:")
     print(context.to_string(index=False))
+    if any(rows is None for rows in history_rows):
+        print("History: not included in this account's access (HTTP 402); see the notice below.")
+        return
     print(f"Requested API record date range: {START_DATE} to {END_DATE}")
     print(f"History method: {HISTORY_METHOD}")
     print(f"History records returned: {sum(len(rows) for rows in history_rows)}")
-    print("Limitation: cadence, history depth, and access vary by source, market hours, dataset, and account.")"""
+    print("Limitation: cadence, history depth, and access vary by source, market hours, dataset, and account.")
+
+
+def skip_without_history():
+    if HISTORY_AVAILABLE:
+        return False
+    print("Skipped: this section needs historical prices, which require a paid plan.")
+    print(f"Upgrade: {PRICING_URL}")
+    return True"""
 
 
 SPREAD_INTRO = """# WTI and Brent Spread Analysis
@@ -148,8 +170,12 @@ SPREAD_INTRO = """# WTI and Brent Spread Analysis
 This notebook compares API-timestamped WTI and Brent records returned by OilPriceAPI.
 It is an educational analysis, not a trading signal or investment recommendation.
 
-- SDK: `oilpriceapi[pandas]==1.11.0`
+- SDK: `oilpriceapi[pandas]==1.17.0`
 - Authentication: Kaggle Secrets label `OILPRICEAPI_KEY`
+- Access: latest prices work on every plan. Historical prices need a paid plan or
+  active trial; on other accounts the history request returns HTTP 402 and the
+  notebook shows the latest-price context, the API's explanation, and the
+  [pricing page](https://www.oilpriceapi.com/pricing?utm_source=kaggle&utm_medium=notebook&utm_campaign=history_gate).
 - [Reviewed product facts](https://api.oilpriceapi.com/product-facts.json) (contract 2026-07-18)
 - [Current API documentation](https://docs.oilpriceapi.com/api-reference/prices/latest)
 - [Data usage policy](https://www.oilpriceapi.com/legal/data-usage)
@@ -160,10 +186,15 @@ cleared in the repository copy; every public result must show its execution time
 
 SPREAD_FETCH = """api_key = get_api_key()
 with OilPriceAPI(api_key=api_key, timeout=30, max_retries=1, enable_telemetry=False) as client:
-    wti_latest, wti_records = fetch_symbol(client, "WTI_USD")
-    brent_latest, brent_records = fetch_symbol(client, "BRENT_CRUDE_USD")
+    wti_latest, wti_records, history_notice = fetch_symbol(client, "WTI_USD")
+    brent_latest, brent_records, brent_notice = fetch_symbol(client, "BRENT_CRUDE_USD")
 
-print_context([wti_latest, brent_latest], [wti_records, brent_records])"""
+history_notice = history_notice or brent_notice
+HISTORY_AVAILABLE = history_notice is None
+print_context([wti_latest, brent_latest], [wti_records, brent_records])
+if history_notice:
+    print()
+    print(history_notice)"""
 
 SPREAD_ANALYSIS = """wti = history_frame(wti_records).rename(columns={"price": "WTI"})
 brent = history_frame(brent_records).rename(columns={"price": "Brent"})
@@ -210,8 +241,12 @@ This notebook calculates descriptive indicators from Brent records returned by
 OilPriceAPI. Indicators summarize the requested sample; they do not forecast prices
 or constitute a trading or investment recommendation.
 
-- SDK: `oilpriceapi[pandas]==1.11.0`
+- SDK: `oilpriceapi[pandas]==1.17.0`
 - Authentication: Kaggle Secrets label `OILPRICEAPI_KEY`
+- Access: latest prices work on every plan. Historical prices need a paid plan or
+  active trial; on other accounts the history request returns HTTP 402 and the
+  notebook shows the latest-price context, the API's explanation, and the
+  [pricing page](https://www.oilpriceapi.com/pricing?utm_source=kaggle&utm_medium=notebook&utm_campaign=history_gate).
 - [Reviewed product facts](https://api.oilpriceapi.com/product-facts.json) (contract 2026-07-18)
 - [Current API documentation](https://docs.oilpriceapi.com/api-reference/prices/latest)
 - [Data usage policy](https://www.oilpriceapi.com/legal/data-usage)
@@ -222,9 +257,13 @@ cleared in the repository copy; every public result must show its execution time
 
 TECHNICAL_FETCH = """api_key = get_api_key()
 with OilPriceAPI(api_key=api_key, timeout=30, max_retries=1, enable_telemetry=False) as client:
-    brent_latest, brent_records = fetch_symbol(client, "BRENT_CRUDE_USD")
+    brent_latest, brent_records, history_notice = fetch_symbol(client, "BRENT_CRUDE_USD")
 
-print_context([brent_latest], [brent_records])"""
+HISTORY_AVAILABLE = history_notice is None
+print_context([brent_latest], [brent_records])
+if history_notice:
+    print()
+    print(history_notice)"""
 
 TECHNICAL_ANALYSIS = """history = history_frame(brent_records)
 if history["currency"].nunique() != 1 or history["unit"].nunique() != 1:
@@ -269,6 +308,11 @@ regime = "above" if last["SMA_20"] > last["SMA_50"] else "at or below"
 print(f"For the last API date, the 20-date SMA is {regime} the 50-date SMA.")
 print(f"Sample return volatility: {analysis['Return_Pct'].std():.2f}% per observed API-date interval.")
 print("These are descriptive sample statistics, not a forecast or recommendation.")"""
+
+
+def needs_history(source: str) -> str:
+    """Run a history-dependent cell only when the account returned history."""
+    return "if not skip_without_history():\n" + indent(source, "    ")
 
 
 def notebook(slug: str, title: str, cells: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -317,12 +361,12 @@ NOTEBOOKS = {
             markdown(
                 "spread-analysis-heading", "## Align API dates and calculate the spread"
             ),
-            code("spread-analysis", SPREAD_ANALYSIS),
+            code("spread-analysis", needs_history(SPREAD_ANALYSIS)),
             markdown(
                 "spread-chart-heading",
                 "## Visualize and summarize the requested sample",
             ),
-            code("spread-plot", SPREAD_PLOT),
+            code("spread-plot", needs_history(SPREAD_PLOT)),
             markdown(
                 "spread-resources",
                 "## Sources and limitations\n\n"
@@ -352,9 +396,9 @@ NOTEBOOKS = {
             markdown(
                 "technical-analysis-heading", "## Calculate descriptive indicators"
             ),
-            code("technical-analysis", TECHNICAL_ANALYSIS),
+            code("technical-analysis", needs_history(TECHNICAL_ANALYSIS)),
             markdown("technical-chart-heading", "## Visualize the requested sample"),
-            code("technical-plot", TECHNICAL_PLOT),
+            code("technical-plot", needs_history(TECHNICAL_PLOT)),
             markdown(
                 "technical-resources",
                 "## Sources and limitations\n\n"

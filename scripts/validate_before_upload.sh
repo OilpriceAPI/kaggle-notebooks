@@ -11,7 +11,7 @@ notebooks=(
 
 if ! python3 -c 'import matplotlib, numpy, oilpriceapi, pandas, seaborn' 2>/dev/null; then
   echo 'Missing notebook dependencies.' >&2
-  echo 'Install: python3 -m pip install "oilpriceapi[pandas]==1.11.0" matplotlib seaborn' >&2
+  echo 'Install: python3 -m pip install "oilpriceapi[pandas]==1.17.0" matplotlib seaborn' >&2
   exit 1
 fi
 

@@ -37,7 +37,7 @@ execution time and the API timestamp/source context.
 From a clean checkout with the pinned notebook dependencies installed:
 
 ```bash
-python3 -m pip install "oilpriceapi[pandas]==1.11.0" matplotlib seaborn
+python3 -m pip install "oilpriceapi[pandas]==1.17.0" matplotlib seaborn
 ./scripts/validate_before_upload.sh
 ```
 
@@ -49,7 +49,9 @@ The command:
 4. executes the exact committed cells against deterministic,
    production-shaped fixtures;
 5. verifies missing/invalid key, locked dataset, 429, timeout, empty response,
-   malformed response, timestamp, unit, and freshness behavior; and
+   malformed response, timestamp, unit, and freshness behavior, plus the
+   free-account path: a 402 `UPGRADE_REQUIRED` on history keeps the latest
+   context, prints the pricing link, and skips the historical sections; and
 6. builds isolated Kaggle CLI upload directories under `dist/kaggle`.
 
 Do not upload if the command changes a tracked notebook or any check fails.
@@ -82,7 +84,9 @@ and repeat the full validation. Do not patch only the Kaggle copy.
 Before recording a release receipt, confirm:
 
 - the attached secret is enabled and no secret value is visible;
-- the first latest-price and history requests succeed;
+- the first latest-price and history requests succeed (the attached key must
+  be on a paid or internal account: from 2026-11-16 a free key gets 402 on
+  history and the public run would show only the upgrade notice);
 - every analytical output names the symbol, currency, unit, source, API
   timestamp, requested range, and method;
 - missing/invalid credentials and quota/access failures give a working next

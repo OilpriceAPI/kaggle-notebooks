@@ -22,18 +22,19 @@ Both public Kaggle URLs currently require a republish receipt for this repositor
 
 ## Runtime Contract
 
-- Python package: `oilpriceapi[pandas]==1.11.0`
+- Python package: `oilpriceapi[pandas]==1.17.0`
 - Secret label: `OILPRICEAPI_KEY` through Kaggle Add-ons > Secrets
 - First request: `GET /v1/prices/latest?by_code=BRENT_CRUDE_USD`
 - History request: `GET /v1/prices/historical` with explicit dates and `interval=daily`
-- Recovery: missing secret, 401, 402/403, 429, timeout, empty response, and malformed response fail closed with a next action
+- Access: from 2026-11-16 12:00 UTC the history endpoints return HTTP 402 `UPGRADE_REQUIRED` for accounts without a paid plan or active trial (OilpriceAPI/oilpriceapi-api#10744). The notebooks then print the latest-price context, the API's explanation and the pricing link, and skip the historical sections instead of failing.
+- Recovery: missing secret, 401, 403, 429, timeout, empty response, and malformed response fail closed with a next action
 
 The notebooks preserve symbol, numeric value, currency, unit, source, the exact API timestamp field used, freshness when returned, requested range, method, and execution time. They do not default missing units, currencies, sources, timestamps, or values.
 
 ## Validate Locally
 
 ```bash
-python3 -m pip install "oilpriceapi[pandas]==1.11.0" matplotlib seaborn
+python3 -m pip install "oilpriceapi[pandas]==1.17.0" matplotlib seaborn
 python3 scripts/generate_notebooks.py
 ./scripts/scan-secrets.sh
 python3 -m unittest discover -s tests -v
@@ -50,6 +51,6 @@ review, and credential/metadata rules, see
 
 - [Product facts](https://api.oilpriceapi.com/product-facts.json)
 - [API reference](https://docs.oilpriceapi.com/api-reference/prices/latest)
-- [Python SDK](https://pypi.org/project/oilpriceapi/1.11.0/)
+- [Python SDK](https://pypi.org/project/oilpriceapi/1.17.0/)
 - [Data usage policy](https://www.oilpriceapi.com/legal/data-usage)
 - [Service status](https://status.oilpriceapi.com)
